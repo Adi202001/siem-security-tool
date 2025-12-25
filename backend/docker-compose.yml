@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: siem-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./siem.db:/app/siem.db
+      - ./models:/app/models
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./siem.db
+    depends_on:
+      - redis
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  redis:
+    image: redis:7-alpine
+    container_name: siem-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  celery:
+    build: .
+    container_name: siem-celery
+    command: celery -A app.tasks worker --loglevel=info
+    volumes:
+      - ./app:/app/app
+      - ./models:/app/models
+    env_file:
+      - .env
+    depends_on:
+      - redis
+
+volumes:
+  redis_data:
