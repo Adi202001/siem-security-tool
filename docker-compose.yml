@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # Backend API
+  backend:
+    build: ./backend
+    container_name: siem-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/siem.db:/app/siem.db
+      - ./backend/models:/app/models
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./siem.db
+      - SECRET_KEY=change-this-secret-key-in-production
+      - DEBUG=True
+    depends_on:
+      - redis
+    networks:
+      - siem-network
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build: ./frontend
+    container_name: siem-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - siem-network
+    restart: unless-stopped
+
+  # Redis for caching and Celery
+  redis:
+    image: redis:7-alpine
+    container_name: siem-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - siem-network
+    restart: unless-stopped
+
+  # Celery worker (optional - for background tasks)
+  celery:
+    build: ./backend
+    container_name: siem-celery
+    command: celery -A app.tasks worker --loglevel=info
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/models:/app/models
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./siem.db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - siem-network
+    restart: unless-stopped
+
+networks:
+  siem-network:
+    driver: bridge
+
+volumes:
+  redis_data:
